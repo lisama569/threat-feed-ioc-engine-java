@@ -1,0 +1,6 @@
+type,value,source,confidence,first_seen,expires_at
+ipv4,203.0.113.10,partner,60,2026-01-06T00:00:00Z,2026-06-01T00:00:00Z
+domain,evil-c2.example.com,partner,70,2026-02-02T00:00:00Z,2027-02-02T00:00:00Z
+email,phish@evil-c2.example.com,partner,80,2026-04-01T00:00:00Z,2027-04-01T00:00:00Z
+ipv4,198.51.100.77,partner,55,2025-01-01T00:00:00Z,2025-12-31T00:00:00Z
+md5,44d88612fea8a8f36de82e1278abb02f,partner,75,2026-05-01T00:00:00Z,2027-05-01T00:00:00Z

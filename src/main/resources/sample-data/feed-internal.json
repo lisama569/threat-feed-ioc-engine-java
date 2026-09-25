@@ -1,0 +1,4 @@
+{"type":"ipv4","value":"203.0.113.10","source":"internal","confidence":90,"first_seen":"2026-01-05T00:00:00Z","expires_at":"2027-01-05T00:00:00Z"}
+{"type":"domain","value":"evil-c2.example.com","source":"internal","confidence":95,"first_seen":"2026-02-01T00:00:00Z","expires_at":"2027-02-01T00:00:00Z"}
+{"type":"sha256","value":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","source":"internal","confidence":100,"first_seen":"2026-03-01T00:00:00Z"}
+{"type":"url","value":"http://evil-c2.example.com/beacon","source":"internal","confidence":85,"first_seen":"2026-02-10T00:00:00Z","expires_at":"2026-12-31T00:00:00Z"}

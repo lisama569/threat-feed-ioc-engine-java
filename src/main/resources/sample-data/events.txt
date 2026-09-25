@@ -1,0 +1,6 @@
+2026-09-26T10:00:00Z fw-denied src=10.1.1.5 dst=203.0.113.10 proto=tcp dport=4444
+2026-09-26T10:01:00Z dns-query host=evil-c2.example.com from=10.1.1.6
+2026-09-26T10:02:00Z proxy-log url=http://evil-c2.example.com/beacon user=alice
+2026-09-26T10:03:00Z mail-gw from=phish@evil-c2.example.com to=bob@corp.example
+2026-09-26T10:04:00Z edr-alert sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 host=ws-42
+2026-09-26T10:05:00Z fw-allowed src=10.1.1.7 dst=8.8.8.8 proto=udp dport=53
