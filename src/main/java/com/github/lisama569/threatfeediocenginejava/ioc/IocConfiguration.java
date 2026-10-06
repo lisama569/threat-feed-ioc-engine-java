@@ -23,4 +23,20 @@ public class IocConfiguration {
     public MatchService matchService(IndicatorStore store) {
         return new MatchService(store, Clock.systemUTC());
     }
+
+    @Bean
+    public com.github.lisama569.threatfeediocenginejava.ioc.fp.FalsePositiveService
+            falsePositiveService(IndicatorStore store) {
+        return new com.github.lisama569.threatfeediocenginejava.ioc.fp.FalsePositiveService(
+                store, Clock.systemUTC());
+    }
+
+    @Bean
+    public com.github.lisama569.threatfeediocenginejava.ioc.event.EventDetectionService
+            eventDetectionService(
+                    com.github.lisama569.threatfeediocenginejava.ioc.event.IocExtractor extractor,
+                    IndicatorStore store) {
+        return new com.github.lisama569.threatfeediocenginejava.ioc.event.EventDetectionService(
+                extractor, store, Clock.systemUTC());
+    }
 }

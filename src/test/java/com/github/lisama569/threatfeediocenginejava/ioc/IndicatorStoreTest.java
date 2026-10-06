@@ -94,6 +94,26 @@ class IndicatorStoreTest {
     }
 
     @Test
+    void expiredHighPriorityRecordNeverShadowsLiveLowerPriorityRecord() {
+        IndicatorStore store = newStore();
+        // feedA wins the merge order but is expired; feedB is still live
+        store.ingest("p1", parser.parse(
+                "[{\"type\":\"ip\",\"value\":\"4.4.4.4\",\"source\":\"feedA\",\"confidence\":99,"
+                        + "\"validUntil\":\"2026-01-01T00:00:00Z\"}]", "p1"));
+        store.ingest("p2", parser.parse(
+                "[{\"type\":\"ip\",\"value\":\"4.4.4.4\",\"source\":\"feedB\",\"confidence\":10,"
+                        + "\"validUntil\":\"2027-01-01T00:00:00Z\"}]", "p2"));
+        Indicator live = store.lookup(IndicatorType.IP, "4.4.4.4", NOW).orElse(null);
+        log.info("partial-expiry multi-source -> live winner={}", live);
+        assertTrue(live != null, "an expired record must not turn the lookup into a miss");
+        assertEquals("feedB", live.source(), "verdict must land on the still-live record");
+
+        // once the feedB record also expires, nothing is live
+        Instant later = Instant.parse("2027-02-01T00:00:00Z");
+        assertTrue(store.lookup(IndicatorType.IP, "4.4.4.4", later).isEmpty());
+    }
+
+    @Test
     void reimportingSameBatchIsIdempotent() {
         IndicatorStore store = newStore();
         String raw = "[{\"type\":\"ip\",\"value\":\"2.2.2.2\",\"source\":\"feedA\",\"confidence\":70}]";

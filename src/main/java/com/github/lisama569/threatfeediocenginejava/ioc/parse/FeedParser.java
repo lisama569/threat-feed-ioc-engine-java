@@ -202,7 +202,7 @@ public class FeedParser {
     }
 
     /** Canonicalize a value for its type; returns null when invalid. */
-    static String normalize(IndicatorType type, String rawValue) {
+    public static String normalize(IndicatorType type, String rawValue) {
         String v = rawValue.trim().toLowerCase(Locale.ROOT);
         return switch (type) {
             case IP -> isValidIpv4(v) || isValidIpv6(v) ? v : null;
