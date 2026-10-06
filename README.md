@@ -15,6 +15,12 @@ HTTP 入口（`IocController`）：
 - `POST /ioc/ingest`，请求头 `X-Batch-Id: <批次号>`，请求体为原始情报文本（JSON 数组或 CSV）。
   返回 `IngestionResult`：`accepted / duplicates / superseded / rejected[]`。
 - `GET /ioc/match?type=ip&value=1.2.3.4`，返回 `MatchResult`：`matched / explanation / indicator`。
+- `POST /ioc/detect`，请求体为**事件原文**（纯文本），返回 `EventVerdict`（见下文「事件原文检测」）。
+- `POST /ioc/detect/batch`，请求体为 JSON 字符串数组，批量检测，按输入顺序返回 `EventVerdict` 列表。
+- `POST /ioc/false-positive`，请求体 JSON：
+  `{"type":"domain","value":"cdn.example.com","reason":"...","validUntil":"2026-11-01T00:00:00Z"}`，
+  将指标标记为误报（见下文「误报处置」）。
+- `DELETE /ioc/false-positive?type=domain&value=cdn.example.com`，撤销误报处置，返回 `{"revoked": true/false}`。
 
 来源优先级通过配置项 `ioc.source-priority` 指定（默认 `feedA,feedB,feedC`，越靠前优先级越高）。
 
@@ -85,6 +91,55 @@ matched IP=1.2.3.4 | source=cert-feed | confidence=90 | validFrom=2026-01-01T00:
 
 未命中也会说明原因（未知或已过期）。
 
+## 事件原文检测
+
+`EventDetectionService`（HTTP：`POST /ioc/detect` 与 `POST /ioc/detect/batch`）直接接收事件原文：
+
+1. **提取**（`IocExtractor`）：从文本中识别 IPv4、域名、URL、邮箱、MD5/SHA1/SHA256。
+   候选值用与摄取完全相同的 `FeedParser.normalize` 规则归一化与校验，
+   因此提取出的值与库中存储形式必然可比。URL 末尾常见的句读符号（`.,;:!?'"`）会被剥离。
+   自由文本中不提取 IPv6（歧义过大）；IPv6 情报的摄取与单指标查询不受影响。
+2. **去重**：同一 `(type, value)` 在一条事件里出现多少次都只判定一次，
+   结果按首次出现位置排序；同一输入的提取结果完全一致（可复现）。
+3. **逐条判定**：每个指标复用 `MatchService` 的判定与解释（来源、置信度、有效期、判定时刻）。
+   整条事件在同一个 `evaluatedAt` 时刻评估，保证结论一致。
+4. **总体结论**（`EventVerdict.verdict`）：
+
+   | verdict | 含义 |
+   |---|---|
+   | `HIT` | 至少一个指标命中生效情报（未被误报抑制） |
+   | `SUPPRESSED` | 无有效命中，但至少一个命中被按误报抑制 |
+   | `NO_HIT` | 提取到了指标，但无一命中生效情报 |
+   | `NO_INDICATORS` | 事件原文中没有任何可检测指标（明确结论，不是空结果或错误） |
+
+## 误报处置（分析人员加白）
+
+`FalsePositiveRegistry`（HTTP：`POST/DELETE /ioc/false-positive`）支持对误报指标做处置：
+
+- **标记**：必须给出 `reason`（原因）与 `validUntil`（生效截止，左闭右开）。
+  同一指标重复标记会覆盖旧处置。
+- **抑制语义**：被处置的指标再次被检测到时，结论为 `SUPPRESSED`——
+  **命中情报本身（来源/置信度/有效期）仍然完整展示**，并附误报原因与抑制截止时刻，
+  不会直接消失或无从区分。总体结论中，只要还有一个未抑制的有效命中，事件仍为 `HIT`。
+- **到期自动恢复**：判定时刻越过 `validUntil` 后抑制立即失效，结论自动恢复正常，
+  过期条目被惰性清理，无需人工干预。
+- **撤销**：`revoke` 立即恢复正常判定。
+- **作用域**：抑制精确作用于某个 `(type, value)`，不影响同事件里的其他指标。
+- **并发**：标记/撤销是单次原子 map 操作；已提交的处置对任何并发检测要么完全可见、
+  要么完全不可见，不存在中间态（见 `FalsePositiveTest` 的并发用例）。
+
+**判定优先级**：先按时效与合并规则选出命中情报，再应用误报抑制；
+误报抑制只改变结论的呈现（HIT → SUPPRESSED），不改变命中所依据的情报记录。
+
+## 兼容范围（既有行为保持不变）
+
+- 摄取格式、拒绝语义、幂等重导、合并优先级全序、单指标 `GET /ioc/match` 的判定与解释格式均不变。
+- 过期/未生效情报永不命中——这一点不变；唯一的细化是：同一 `(type, value)` 存在多条记录时，
+  胜者现在在**仍生效的记录**中选出，已过期的高优先级记录不再遮蔽其他来源仍生效的记录
+  （此前该组合会被判为未命中）。所有既有测试用例的结论不受影响。
+- 性能与并发模型不变：摄取仍在写锁内原子合并，匹配仍是 O(1) 哈希查找；
+  事件检测只是对提取出的每个指标各做一次同样的查找。
+
 ## 并发与性能
 
 - 存储使用读写锁：一个批次在写锁内**原子**合并，读者不会看到中间态；
@@ -98,8 +153,13 @@ matched IP=1.2.3.4 | source=cert-feed | confidence=90 | validFrom=2026-01-01T00:
 |---|---|
 | `FeedParserTest` | JSON/CSV 解析、归一化、各类畸形输入的拒绝原因分类与原始内容回查 |
 | `IndicatorStoreTest` | 来源冲突（优先级>置信度）、顺序无关的可复现结论、过期/未生效不命中、幂等重导、superseded 计数 |
+| `IocExtractorTest` | 事件原文多类型指标提取、重复指标只提取一次、无指标文本、非法候选过滤、归一化与摄取一致、提取可复现 |
+| `EventDetectionTest` | 多指标事件逐条判定与总体结论、重复指标只判一次、无指标事件返回 `NO_INDICATORS`、多来源叠加部分过期落在生效记录、全过期不命中、批量检测保序、重复检测结论一致 |
+| `FalsePositiveTest` | 误报标记后结论为 `SUPPRESSED` 且命中情报仍可见、到期自动恢复、撤销立即恢复、抑制只作用于指定指标、并发检测下已提交处置无中间态 |
 | `ConcurrencyTest` | 并发摄取+查询下无漏检、无中间态、提交后必命中确定胜者 |
 | `PerformanceTest` | 10 万级指标下哈希匹配 vs 线性扫描，规模增长不线性劣化 |
 | `EndToEndFlowTest` | 多来源（JSON+CSV）端到端流程：冲突、过期、畸形、幂等重导，日志打印输入与判定依据 |
 
 单测日志（SLF4J）会打印输入载荷与每条判定的依据，可用 `mvn test` 直接观察。
+例如事件检测日志会打印每个提取指标的 `HIT/SUPPRESSED/MISS` 状态、命中情报的
+来源/置信度/有效期，以及整条事件的汇总（指标数、命中数、抑制数、总体结论）。

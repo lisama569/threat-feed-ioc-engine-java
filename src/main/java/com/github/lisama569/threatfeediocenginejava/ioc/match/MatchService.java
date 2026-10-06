@@ -25,7 +25,14 @@ public class MatchService {
 
     /** Match one event field; the result always carries a判定依据 explanation. */
     public MatchResult match(IndicatorType type, String value) {
-        Instant now = clock.instant();
+        return match(type, value, clock.instant());
+    }
+
+    /**
+     * Match one event field at an explicit evaluation instant, so that a
+     * whole event (many indicators) is judged at a single, reproducible time.
+     */
+    public MatchResult match(IndicatorType type, String value, Instant now) {
         Optional<Indicator> hit = store.lookup(type, value, now);
         if (hit.isEmpty()) {
             return MatchResult.miss(String.format(

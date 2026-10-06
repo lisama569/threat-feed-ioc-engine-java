@@ -83,7 +83,11 @@ public class IndicatorStore {
         }
     }
 
-    /** Look up the winning live indicator for (type, value) at the given instant. */
+    /**
+     * Look up the winning live indicator for (type, value) at the given instant.
+     * The winner is chosen among the candidates that are live at {@code now}:
+     * an expired record never shadows a still-live record from another source.
+     */
     public Optional<Indicator> lookup(IndicatorType type, String value, Instant now) {
         lock.readLock().lock();
         try {
@@ -91,11 +95,14 @@ public class IndicatorStore {
             if (candidates == null) {
                 return Optional.empty();
             }
-            Indicator w = winner(candidates);
-            if (w == null || !w.isLiveAt(now)) {
-                return Optional.empty();
+            List<Indicator> live = new ArrayList<>(candidates.size());
+            for (Indicator ind : candidates) {
+                if (ind.isLiveAt(now)) {
+                    live.add(ind);
+                }
             }
-            return Optional.of(w);
+            Indicator w = winner(live);
+            return Optional.ofNullable(w);
         } finally {
             lock.readLock().unlock();
         }

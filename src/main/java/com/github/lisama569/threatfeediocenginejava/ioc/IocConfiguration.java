@@ -1,5 +1,8 @@
 package com.github.lisama569.threatfeediocenginejava.ioc;
 
+import com.github.lisama569.threatfeediocenginejava.ioc.detect.EventDetectionService;
+import com.github.lisama569.threatfeediocenginejava.ioc.extract.IocExtractor;
+import com.github.lisama569.threatfeediocenginejava.ioc.fp.FalsePositiveRegistry;
 import com.github.lisama569.threatfeediocenginejava.ioc.match.MatchService;
 import com.github.lisama569.threatfeediocenginejava.ioc.store.IndicatorStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,9 +12,14 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Clock;
 import java.util.List;
 
-/** Wires the IOC engine: source priority order, store, matcher. */
+/** Wires the IOC engine: source priority order, store, matcher, extractor, dispositions. */
 @Configuration
 public class IocConfiguration {
+
+    @Bean
+    public Clock iocClock() {
+        return Clock.systemUTC();
+    }
 
     @Bean
     public IndicatorStore indicatorStore(
@@ -20,7 +28,23 @@ public class IocConfiguration {
     }
 
     @Bean
-    public MatchService matchService(IndicatorStore store) {
-        return new MatchService(store, Clock.systemUTC());
+    public MatchService matchService(IndicatorStore store, Clock iocClock) {
+        return new MatchService(store, iocClock);
+    }
+
+    @Bean
+    public IocExtractor iocExtractor() {
+        return new IocExtractor();
+    }
+
+    @Bean
+    public FalsePositiveRegistry falsePositiveRegistry(Clock iocClock) {
+        return new FalsePositiveRegistry(iocClock);
+    }
+
+    @Bean
+    public EventDetectionService eventDetectionService(IocExtractor extractor, MatchService matcher,
+                                                       FalsePositiveRegistry registry, Clock iocClock) {
+        return new EventDetectionService(extractor, matcher, registry, iocClock);
     }
 }
